@@ -1,0 +1,4 @@
+https://universe.roboflow.com/dmitri-kaslov-fmitx/grocery1
+https://universe.roboflow.com/jonas-hiltl-vuqw9/test-zlrwd/browse?queryText=&pageSize=200&startingIndex=450&browseQuery=true
+https://universe.roboflow.com/food-recipe-ingredient-images-0gnku/food-ingredients-dataset
+https://universe.roboflow.com/fridgeapp/whatsinyourfridge-1cbaa
