@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audio Recorder</title>
+</head>
+<body>
+    <h2>Record an Audio File</h2>
+
+    <button id="startBtn">▶️ Start Recording</button>
+    <button id="stopBtn" disabled>⏹️ Stop and Upload</button>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+
+        const startBtn = document.getElementById("startBtn");
+        const stopBtn = document.getElementById("stopBtn");
+
+        // Start recording
+        startBtn.onclick = async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+
+            mediaRecorder.onstop = async () => {
+                const blob = new Blob(audioChunks, { type: "audio/webm" });
+                const formData = new FormData();
+                formData.append("audio", blob, "recording.webm");
+
+                // Upload to Flask backend
+                await fetch("/upload", {
+                    method: "POST",
+                    body: formData
+                });
+
+                alert("Recording uploaded successfully!");
+            };
+
+            mediaRecorder.start();
+
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+        };
+
+        // Stop recording
+        stopBtn.onclick = () => {
+            mediaRecorder.stop();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        };
+    </script>
+</body>
+</html>
