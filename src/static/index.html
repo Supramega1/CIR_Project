@@ -1,57 +1,202 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Audio Recorder</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Yumeye – Voice Recipe Generator</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f9f9fb;
+      color: #333;
+    }
+    h1 { text-align: center; color: #d35400; }
+    .controls { text-align: center; margin: 30px 0; }
+    button {
+      padding: 12px 24px;
+      margin: 0 10px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    /* Start button – normal */
+    #startBtn {
+      background: #27ae60; color: white;
+    }
+    #startBtn:hover { background: #219653; }
+
+    /* Start button – disabled (recording in progress) */
+    #startBtn:disabled {
+      background: #95a5a6 !important;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    /* Stop button */
+    #stopBtn {
+      background: #c0392b; color: white;
+    }
+    #stopBtn:hover { background: #e74c3c; }
+    #stopBtn:disabled { background: #95a5a6; cursor: not-allowed; }
+
+    .output {
+      margin-top: 30px;
+      padding: 20px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: none;
+    }
+    .output.show { display: block; animation: fadeIn 0.5s; }
+    .transcription { font-style: italic; color: #7f8c8d; margin-bottom: 15px; }
+    .recipe { line-height: 1.7; }
+    .recipe h3 { color: #d35400; margin-top: 20px; }
+    .recipe ul, .recipe ol { padding-left: 20px; }
+    .loading {
+      text-align: center;
+      color: #3498db;
+      font-style: italic;
+      display: none;
+    }
+    .error {
+      color: #e74c3c;
+      background: #fadbd8;
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+      display: none;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  </style>
 </head>
 <body>
-    <h2>Record an Audio File</h2>
 
-    <button id="startBtn">▶️ Start Recording</button>
-    <button id="stopBtn" disabled>⏹️ Stop and Upload</button>
+  <h1>Yumeye</h1>
+  <p style="text-align:center; color:#7f8c8d;">Speak your ingredients → Get a pro recipe</p>
 
-    <script>
-        let mediaRecorder;
-        let audioChunks = [];
+  <div class="controls">
+    <button id="startBtn">Start Recording</button>
+    <button id="stopBtn" disabled>Stop & Generate Recipe</button>
+  </div>
 
-        const startBtn = document.getElementById("startBtn");
-        const stopBtn = document.getElementById("stopBtn");
+  <div class="loading" id="loading">Generating your recipe...</div>
+  <div class="error" id="error"></div>
 
-        // Start recording
-        startBtn.onclick = async () => {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
+  <div class="output" id="output">
+    <div class="transcription" id="transcription"></div>
+    <div class="recipe" id="recipe"></div>
+  </div>
 
-            audioChunks = [];
+  <script>
+    // DOM Elements
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const loading = document.getElementById("loading");
+    const errorDiv = document.getElementById("error");
+    const output = document.getElementById("output");
+    const transcriptionEl = document.getElementById("transcription");
+    const recipeEl = document.getElementById("recipe");
 
-            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    let mediaRecorder;
+    let audioChunks = [];
+    let conversationId = localStorage.getItem("conversation_id") || null;
 
-            mediaRecorder.onstop = async () => {
-                const blob = new Blob(audioChunks, { type: "audio/webm" });
-                const formData = new FormData();
-                formData.append("audio", blob, "recording.webm");
+    // Start recording
+    startBtn.onclick = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
 
-                // Upload to Flask backend
-                await fetch("/upload", {
-                    method: "POST",
-                    body: formData
-                });
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = uploadAudio;
 
-                alert("Recording uploaded successfully!");
-            };
+        mediaRecorder.start();
+        startBtn.disabled = true;   // becomes gray + not clickable
+        stopBtn.disabled = false;
+        loading.style.display = "none";
+        errorDiv.style.display = "none";
+        output.classList.remove("show");
+      } catch (err) {
+        showError("Microphone access denied or not available.");
+      }
+    };
 
-            mediaRecorder.start();
+    // Stop recording
+    stopBtn.onclick = () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        startBtn.disabled = true;   // stay gray until response
+        stopBtn.disabled = true;
+        loading.style.display = "block";
+      }
+    };
 
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-        };
+    // Upload audio + get recipe
+    async function uploadAudio() {
+      const blob = new Blob(audioChunks, { type: "audio/webm" });
+      const formData = new FormData();
+      formData.append("audio", blob, "recording.webm");
+      if (conversationId) {
+        formData.append("conversation_id", conversationId);
+      }
 
-        // Stop recording
-        stopBtn.onclick = () => {
-            mediaRecorder.stop();
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-        };
-    </script>
+      try {
+        const response = await fetch("/upload", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          conversationId = data.conversation_id;
+          localStorage.setItem("conversation_id", conversationId);
+
+          transcriptionEl.textContent = `You said: "${data.transcription}"`;
+          recipeEl.innerHTML = markdownToHtml(data.llm_response);
+
+          output.classList.add("show");
+          loading.style.display = "none";
+        } else {
+          showError(data.error || "Server error");
+        }
+      } catch (err) {
+        showError("Failed to reach server. Is Flask running?");
+      } finally {
+        // Re-enable start button after everything is done
+        startBtn.disabled = false;
+      }
+    }
+
+    // Simple Markdown → HTML (for recipes)
+    function markdownToHtml(text) {
+      return text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/^\# (.*$)/gm, '<h3>$1</h3>')
+        .replace(/^\- (.*$)/gm, '<li>$1</li>')
+        .replace(/^\d+\. (.*$)/gm, '<li><strong>$1</strong></li>')
+        .replace(/<li>/g, '<ul><li>')
+        .replace(/<\/li>(?!\s*<\/ul>)/g, '</li>')
+        .replace(/<\/li>\s*<ul>/g, '</li><li>')
+        .replace(/<\/ul>(?!\s*<ul>)/g, '</ul>')
+        .replace(/\n/g, '<br>');
+    }
+
+    function showError(msg) {
+      errorDiv.textContent = msg;
+      errorDiv.style.display = "block";
+      loading.style.display = "none";
+      startBtn.disabled = false;   // allow retry
+    }
+  </script>
+
 </body>
 </html>
