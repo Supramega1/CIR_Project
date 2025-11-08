@@ -22,8 +22,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Initialize a YOLO-World model
-    model = YOLO("./src/Code_YOLO/yolov8s-world.pt")  # or select yolov8m/l-world.pt
+    model = YOLO("yolov8s.pt")  # or select yolov8m/l-world.pt
     # Train the model on the COCO8 example dataset for 100 epochs
+    print(model.names)
+    '''
     data_file = "./src/Code_YOLO/Grocery1.v1i.yolov8/data.yaml"  # path to dataset config file
     results = model.train(data=data_file, epochs=100, imgsz=640)
     # Define custom classes
@@ -31,5 +33,5 @@ if __name__ == "__main__":
     #model.set_classes(classes)
 
     # Save the model with the defined offline vocabulary
-    model.save("./src/Code_YOLO/custom_yolov8s.pt")
-    print(results)
+    #model.save("./src/Code_YOLO/custom_yolov8s.pt")
+    '''

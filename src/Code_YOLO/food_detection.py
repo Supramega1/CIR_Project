@@ -6,7 +6,7 @@ This script provides small, well-factored functions:
 - draw_predictions(frame, result, names)
 - run_webcam(model_path, camera_index, conf)
 
-By default it will try to load `yolo11n.pt` from the repository root. If you exported a Roboflow YOLOv8 model, point
+By default it will try to load `yolov8s.pt` from the repository root. If you exported a Roboflow YOLOv8 model, point
 `--model` to the .pt file you downloaded.
 """
 
@@ -46,14 +46,14 @@ def load_model(model_path: str = "yolov8s.pt", device: str = None) -> YOLO:
     return model
 
 
-def predict_on_frame(model: YOLO, frame: np.ndarray, conf: float = 0.25):
+def predict_on_frame(model: YOLO, frame: np.ndarray, conf: float = 0.25, classes: Tuple[int] = None):
     """Run model inference on a single BGR frame.
 
     Returns the ultralytics Results object for the frame.
     """
     # Ultralyics accepts numpy arrays (BGR) directly.
     # We request a single-frame prediction with the provided confidence threshold.
-    results = model(frame, conf=conf, verbose=False)
+    results = model(frame, conf=conf, verbose=False, classes=classes)
     # results is an iterable; return the first result for convenience
     return results[0]
 
@@ -191,7 +191,7 @@ def draw_predictions(frame: np.ndarray, result, names: dict) -> np.ndarray:
 
     return new
 
-def run_webcam(model_path: str = "yolo11n.pt", camera_index: int = 0, conf: float = 0.25):
+def run_webcam(model_path: str = "yolo11n.pt", camera_index: int = 0, conf: float = 0.25, classes: Tuple[int] = None):
     """Open the webcam and run real-time detection loop.
 
     Press 'q' to quit, 's' to save a screenshot (saved next to script).
@@ -218,7 +218,7 @@ def run_webcam(model_path: str = "yolo11n.pt", camera_index: int = 0, conf: floa
             frame = cv2.resize(frame, (640, 480))
 
             with torch.no_grad():
-                result = predict_on_frame(model, frame, conf=conf)
+                result = predict_on_frame(model, frame, conf=conf, classes=classes)
             frame = draw_predictions(frame, result, names)
 
             # FPS calculation
@@ -246,16 +246,15 @@ def run_webcam(model_path: str = "yolo11n.pt", camera_index: int = 0, conf: floa
         cap.release()
         cv2.destroyAllWindows()
 
-
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run real-time food detection using a YOLO model and your webcam")
-    p.add_argument("--model", "-m", default="yolo11n.pt", help="Path to YOLO weights (.pt) or model spec")
+    p.add_argument("--model", "-m", default="yolov8s.pt", help="Path to YOLO weights (.pt) or model spec")
     p.add_argument("--camera", "-c", type=int, default=0, help="Camera index for cv2.VideoCapture")
     p.add_argument("--conf", type=float, default=0.25, help="Confidence threshold")
     return p.parse_args()
 
 import matplotlib.pyplot as plt
-def upload_and_show_image(model_path: str = "yolo11n.pt", conf: float = 0.25):
+def upload_and_show_image(model_path: str = "yolov8s.pt", conf: float = 0.25):
     """
     Repeatedly open a file dialog to choose an image, run the YOLO model on it,
     and display the resulting annotated image in a matplotlib window. After you
@@ -325,5 +324,10 @@ def upload_and_show_image(model_path: str = "yolo11n.pt", conf: float = 0.25):
 
 if __name__ == "__main__":
     args = parse_args()
-    run_webcam(args.model, args.camera, args.conf)
+    classes = {
+         39: 'bottle', 46: 'banana', 47: 'apple', 48: 'sandwich', 
+         49: 'orange', 50: 'broccoli', 51: 'carrot', 52: 'hot dog', 
+         53: 'pizza', 54: 'donut', 55: 'cake'}
+    run_webcam(args.model, args.camera, args.conf, classes=list(classes.keys()))
     #upload_and_show_image(args.model, args.conf)
+    print()
