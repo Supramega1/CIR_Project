@@ -19,7 +19,7 @@ import threading
 whisper_model = whisper.load_model("small.en")
 
 # Ollama model to use for recipe generation
-LLM_MODEL = "llama3.2"          # Might change to "llama3.2:1b" or "phi3"
+LLM_MODEL = "llama3.2"          # Might change to "llama3.2:1b" or "phi3" later
 
 # Folder where uploaded audio files are temporarily stored
 UPLOAD_FOLDER = "recordings"

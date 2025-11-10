@@ -1,0 +1,7 @@
+In this file put everything that needs to be improved in the project so we don't forget :
+- Make the TTS work
+- Make YOLO work
+- Implement DATABASE
+- Needs to fix the conversation lentgh of the llm 
+        Maybe find a way to detect when a recipe is generated, and then only keep recipe in mind
+        Maybe just calculate the contexte lentgh but not forget the current recipe
