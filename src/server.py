@@ -135,6 +135,67 @@ def upload_audio():
         if os.path.exists(filepath):
             os.remove(filepath)
         return jsonify({"error": str(e)}), 500
+    
+@app.route("/texte", methods=["POST"])
+def texte_input():
+    """
+    Expected JSON:
+        - text (string): user-written ingredients
+        - conversation_id (optional): to keep history
+
+    Returns JSON with LLM-generated recipe.
+    """
+    data = request.get_json()
+
+    if not data or "text" not in data:
+        return jsonify({"error": "Missing 'text' field"}), 400
+
+    user_text = data["text"].strip()
+    if not user_text:
+        return jsonify({"error": "Empty text"}), 400
+
+    # Use provided ID or generate a new one
+    conversation_id = data.get(
+        "conversation_id",
+        datetime.now().strftime("%Y%m%d_%H%M%S")
+    )
+
+    print(f"[User TEXT] {user_text}")
+
+    try:
+        # ---- 1. Initialise / retrieve conversation ----
+        if conversation_id not in CONVERSATIONS:
+            CONVERSATIONS[conversation_id] = {
+                "messages": [SYSTEM_PROMPT],
+                "last_used": datetime.now()
+            }
+
+        conv = CONVERSATIONS[conversation_id]
+        conv["last_used"] = datetime.now()
+
+        # Append user message
+        conv["messages"].append({"role": "user", "content": user_text})
+
+        # ---- 2. Call Ollama ----
+        response = ollama.chat(
+            model=LLM_MODEL,
+            messages=conv["messages"]
+        )
+        llm_reply = response["message"]["content"]
+
+        # Append assistant reply to history
+        conv["messages"].append({"role": "assistant", "content": llm_reply})
+        print(f"[Chef] {llm_reply}")
+
+        # ---- 3. Return JSON ----
+        return jsonify({
+            "transcription": user_text,
+            "llm_response": llm_reply,
+            "conversation_id": conversation_id
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ------------------- HEALTH CHECK -------------------
 @app.route("/health")

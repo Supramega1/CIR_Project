@@ -24,26 +24,42 @@
       cursor: pointer;
       transition: background 0.3s;
     }
-
-    /* Start button – normal */
-    #startBtn {
-      background: #27ae60; color: white;
-    }
+    #startBtn { background: #27ae60; color: white; }
     #startBtn:hover { background: #219653; }
-
-    /* Start button – disabled (recording in progress) */
     #startBtn:disabled {
       background: #95a5a6 !important;
       cursor: not-allowed;
       opacity: 0.7;
     }
-
-    /* Stop button */
-    #stopBtn {
-      background: #c0392b; color: white;
-    }
+    #stopBtn { background: #c0392b; color: white; }
     #stopBtn:hover { background: #e74c3c; }
-    #stopBtn:disabled { background: #95a5a6; cursor: not-allowed; }
+    #stopBtn:disabled { background: #95a5a6; cursor: not-allowed;opacity: 0.7; }
+
+    .text-input-container {
+      margin: 30px 0;
+      padding: 20px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    textarea {
+      width: 95%;
+      height: 120px;
+      padding: 10px;
+      font-size: 16px;
+      resize: vertical;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    #textSubmit {
+      margin-top: 15px;
+      background: #2980b9;
+      color: white;
+    }
+    #textSubmit:hover { background: #2471a3; }
+
+    #textSubmit:disabled { background: #95a5a6; cursor: not-allowed;opacity: 0.7; }
+
 
     .output {
       margin-top: 30px;
@@ -58,20 +74,10 @@
     .recipe { line-height: 1.7; }
     .recipe h3 { color: #d35400; margin-top: 20px; }
     .recipe ul, .recipe ol { padding-left: 20px; }
-    .loading {
-      text-align: center;
-      color: #3498db;
-      font-style: italic;
-      display: none;
-    }
-    .error {
-      color: #e74c3c;
-      background: #fadbd8;
-      padding: 10px;
-      border-radius: 6px;
-      margin-top: 10px;
-      display: none;
-    }
+
+    .loading { text-align: center; color: #3498db; font-style: italic; display: none; }
+    .error { color: #e74c3c; background: #fadbd8; padding: 10px; border-radius: 6px; margin-top: 10px; display: none; }
+
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   </style>
 </head>
@@ -85,6 +91,13 @@
     <button id="stopBtn" disabled>Stop & Generate Recipe</button>
   </div>
 
+  <!-- TEXT INPUT MODULE -->
+  <div class="text-input-container">
+    <h3>Or type your ingredients</h3>
+    <textarea id="textInput" placeholder="Ex: chicken, rice, tomato, garlic..."></textarea>
+    <button id="textSubmit">Generate Recipe from Text</button>
+  </div>
+
   <div class="loading" id="loading">Generating your recipe...</div>
   <div class="error" id="error"></div>
 
@@ -94,7 +107,6 @@
   </div>
 
   <script>
-    // DOM Elements
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
     const loading = document.getElementById("loading");
@@ -102,6 +114,8 @@
     const output = document.getElementById("output");
     const transcriptionEl = document.getElementById("transcription");
     const recipeEl = document.getElementById("recipe");
+    const textInput = document.getElementById("textInput");
+    const textSubmit = document.getElementById("textSubmit");
 
     let mediaRecorder;
     let audioChunks = [];
@@ -118,7 +132,8 @@
         mediaRecorder.onstop = uploadAudio;
 
         mediaRecorder.start();
-        startBtn.disabled = true;   // becomes gray + not clickable
+        textSubmit.disabled = true;
+        startBtn.disabled = true;
         stopBtn.disabled = false;
         loading.style.display = "none";
         errorDiv.style.display = "none";
@@ -128,31 +143,25 @@
       }
     };
 
-    // Stop recording
     stopBtn.onclick = () => {
       if (mediaRecorder && mediaRecorder.state === "recording") {
         mediaRecorder.stop();
-        startBtn.disabled = true;   // stay gray until response
+        startBtn.disabled = true;
+        textSubmit.disabled = true;
         stopBtn.disabled = true;
         loading.style.display = "block";
       }
     };
 
-    // Upload audio + get recipe
+    // Upload audio
     async function uploadAudio() {
       const blob = new Blob(audioChunks, { type: "audio/webm" });
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
-      if (conversationId) {
-        formData.append("conversation_id", conversationId);
-      }
+      if (conversationId) formData.append("conversation_id", conversationId);
 
       try {
-        const response = await fetch("/upload", {
-          method: "POST",
-          body: formData
-        });
-
+        const response = await fetch("/upload", { method: "POST", body: formData });
         const data = await response.json();
 
         if (response.ok) {
@@ -161,32 +170,75 @@
 
           transcriptionEl.textContent = `You said: "${data.transcription}"`;
           recipeEl.innerHTML = markdownToHtml(data.llm_response);
-
           output.classList.add("show");
           loading.style.display = "none";
-        } else {
-          showError(data.error || "Server error");
-        }
-      } catch (err) {
+        } else showError(data.error || "Server error");
+      } catch {
         showError("Failed to reach server. Is Flask running?");
       } finally {
-        // Re-enable start button after everything is done
         startBtn.disabled = false;
+        textSubmit.disabled = false;
       }
     }
 
-    // Simple Markdown → HTML (for recipes)
+    // TEXT SUBMIT HANDLER
+    textSubmit.onclick = async () => {
+      const text = textInput.value.trim();
+      if (!text) return showError("Please enter some ingredients.");
+
+      // If a recording is currently running, prevent text submit.
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        return showError("Veuillez arrêter l'enregistrement vocal avant d'envoyer le texte.");
+      }
+
+      // Disable voice controls while the text request is in flight
+      startBtn.disabled = true;
+      stopBtn.disabled = true;
+      textSubmit.disabled = true;
+
+      loading.style.display = "block";
+      errorDiv.style.display = "none";
+      output.classList.remove("show");
+
+      try {
+        const response = await fetch("/texte", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, conversation_id: conversationId })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          conversationId = data.conversation_id;
+          localStorage.setItem("conversation_id", conversationId);
+
+          transcriptionEl.textContent = `You wrote: "${text}"`;
+          recipeEl.innerHTML = markdownToHtml(data.llm_response);
+          output.classList.add("show");
+          loading.style.display = "none";
+          textInput.value = "";
+
+        } else showError(data.error || "Server error");
+
+      } catch {
+        showError("Failed to reach /texte route.");
+      } finally {
+        // Re-enable controls after LLM response (or error)
+        startBtn.disabled = false;
+        stopBtn.disabled = true; // stop should remain disabled until recording starts
+        textSubmit.disabled = false;
+      }
+    };
+
+    // Markdown → HTML
     function markdownToHtml(text) {
       return text
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
         .replace(/^\# (.*$)/gm, '<h3>$1</h3>')
-        .replace(/^\- (.*$)/gm, '<li>$1</li>')
-        .replace(/^\d+\. (.*$)/gm, '<li><strong>$1</strong></li>')
-        .replace(/<li>/g, '<ul><li>')
-        .replace(/<\/li>(?!\s*<\/ul>)/g, '</li>')
-        .replace(/<\/li>\s*<ul>/g, '</li><li>')
-        .replace(/<\/ul>(?!\s*<ul>)/g, '</ul>')
+        .replace(/^\- (.*$)/gm, '<ul><li>$1</li></ul>')
+        .replace(/^\d+\. (.*$)/gm, '<ol><li>$1</li></ol>')
         .replace(/\n/g, '<br>');
     }
 
@@ -194,7 +246,8 @@
       errorDiv.textContent = msg;
       errorDiv.style.display = "block";
       loading.style.display = "none";
-      startBtn.disabled = false;   // allow retry
+      startBtn.disabled = false;
+      textSubmit.disabled = false;
     }
   </script>
 
