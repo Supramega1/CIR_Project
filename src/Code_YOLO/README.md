@@ -20,5 +20,11 @@ Use a model fined tuned for object detection on fridge content.
 
 to run object detection with webcam
 ```
-python food_detection.py --model best_yolov8s_food_cleaned_dataset_1.pt --camera 0 --conf 0.25
+python food_detection.py --model best_yolov8s_16cls.pt --camera 0 --conf 0.25
+```
+
+To run on one image at a time (chosen from your computer), set camera to something else than 0
+
+```
+python food_detection.py --model best_yolov8s_16cls.pt --camera 2 --conf 0.25
 ```

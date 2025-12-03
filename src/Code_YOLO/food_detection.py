@@ -248,8 +248,9 @@ def run_webcam(model_path: str = "yolo11n.pt", camera_index: int = 0, conf: floa
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run real-time food detection using a YOLO model and your webcam")
-    p.add_argument("--model", "-m", default="yolov8s.pt", help="Path to YOLO weights (.pt) or model spec")
-    p.add_argument("--camera", "-c", type=int, default=0, help="Camera index for cv2.VideoCapture")
+    p.add_argument("--model", "-m", default="models/yolov8s.pt", help="Path to YOLO weights (.pt) or model spec")
+    p.add_argument("--camera", "-c", type=int, default=0, help="Camera index for cv2.VideoCapture. Only used if mode = 'camera")
+    p.add_argument('--mode', '-m', type=str, default="image", help='either "image" or "camera". Image to load  picture from the machine , camera to use the webcam stream')
     p.add_argument("--conf", type=float, default=0.25, help="Confidence threshold")
     return p.parse_args()
 
@@ -328,6 +329,11 @@ if __name__ == "__main__":
          39: 'bottle', 46: 'banana', 47: 'apple', 48: 'sandwich', 
          49: 'orange', 50: 'broccoli', 51: 'carrot', 52: 'hot dog', 
          53: 'pizza', 54: 'donut', 55: 'cake'}
-    run_webcam(args.model, args.camera, args.conf, classes=list(classes.keys()))
-    #upload_and_show_image(args.model, args.conf)
-    print()
+    #run_webcam(args.model, args.camera, args.conf, classes=list(classes.keys()))
+    if args.mode == 'image':
+        upload_and_show_image(args.model, args.conf)
+    elif args.mode== 'camera':
+        run_webcam(args.model, args.camera, args.conf)
+    else:
+        raise Exception("the mode must be either 'image' or 'camera'")
+        
