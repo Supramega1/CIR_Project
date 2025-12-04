@@ -28,7 +28,7 @@ LLM_MODEL = "llama3.2"          # Might change to "llama3.2:1b" or "phi3" later
 #Piper Model
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(SCRIPT_DIR, "en_US-lessac-high.onnx")
-voice = PiperVoice.load(MODEL_PATH)
+voice = PiperVoice.load(MODEL_PATH, use_cuda=True)
 current_thread = None
 current_stop_event = None
 
