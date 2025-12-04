@@ -121,8 +121,18 @@
     let audioChunks = [];
     let conversationId = localStorage.getItem("conversation_id") || null;
 
+    async function stopTTS() {
+      try {
+        await fetch("/stop_tts", { method: "GET" });
+        console.log("TTS stopped (if running)");
+      } catch (err) {
+        console.warn("Failed to stop TTS:", err);
+      }
+    };
+
     // Start recording
     startBtn.onclick = async () => {
+      await stopTTS();
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
@@ -183,6 +193,7 @@
 
     // TEXT SUBMIT HANDLER
     textSubmit.onclick = async () => {
+      stopTTS();
       const text = textInput.value.trim();
       if (!text) return showError("Please enter some ingredients.");
 

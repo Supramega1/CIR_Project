@@ -1,4 +1,4 @@
-from piper import PiperVoice, SynthesisConfig
+from piper import *
 import wave
 import sounddevice as sd
 import numpy as np

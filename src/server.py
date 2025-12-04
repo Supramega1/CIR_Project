@@ -13,6 +13,10 @@ import os
 from datetime import datetime
 import ollama
 import threading
+import sounddevice as sd
+import numpy as np
+from piper import PiperVoice
+import re
 
 # ------------------- CONFIG -------------------
 # Whisper model (English-only, fast on CPU/GPU)
@@ -20,6 +24,13 @@ whisper_model = whisper.load_model("small.en")
 
 # Ollama model to use for recipe generation
 LLM_MODEL = "llama3.2"          # Might change to "llama3.2:1b" or "phi3" later
+
+#Piper Model
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(SCRIPT_DIR, "en_US-lessac-high.onnx")
+voice = PiperVoice.load(MODEL_PATH)
+current_thread = None
+current_stop_event = None
 
 # Folder where uploaded audio files are temporarily stored
 UPLOAD_FOLDER = "recordings"
@@ -45,6 +56,76 @@ Use ALL ingredients mentioned. Be precise and professional."""
 }
 
 app = Flask(__name__)
+
+def sanitize_text_keep_punct(text):
+    """Remove unwanted characters but keep basic punctuation."""
+    cleaned_text = re.sub(r'[^A-Za-z0-9\s.,!?]', '', text)
+    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+    return cleaned_text.strip()
+
+def tts_stream(texte: str):
+    global current_thread, current_stop_event
+
+    texte = sanitize_text_keep_punct(texte)
+
+    # If a TTS is already running, stop it. It should never happen with the current design, but just in case.
+    if current_thread is not None and current_thread.is_alive():
+        print("Stopping previous TTS stream")
+        current_stop_event.set()
+        current_thread.join()
+
+    stop_event = threading.Event()
+    current_stop_event = stop_event
+
+    def worker():
+        stream = None
+
+        for chunk in voice.synthesize(texte):
+
+            if stop_event.is_set():
+                print("Stopping TTS stream on request")
+                break
+
+            audio = np.frombuffer(chunk.audio_int16_bytes, dtype=np.int16)
+
+            if stream is None:
+                stream = sd.OutputStream(
+                    samplerate=chunk.sample_rate,
+                    channels=chunk.sample_channels,
+                    dtype='int16'
+                )
+                stream.start()
+
+            stream.write(audio)
+
+        if stream is not None:
+            stream.stop()
+            stream.close()
+            print("TTS stream finished")
+
+    # Start TTS in a separate thread
+    thread = threading.Thread(target=worker)
+    current_thread = thread
+    thread.start()
+    return None
+
+@app.route("/stop_tts", methods=["GET"])
+def stop_tts():
+    global current_thread, current_stop_event
+
+    if current_thread and current_thread.is_alive():
+        print("Stopping TTS stream")
+        current_stop_event.set()
+        current_thread.join()
+        return jsonify({
+            "status": "success",
+            "message": "TTS stream stopped"
+        }), 200
+
+    return jsonify({
+        "status": "idle",
+        "message": "No active TTS stream to stop"
+    }), 200
 
 # ------------------- CLEANUP (We might need to change the behavior of the cleanup because we have a small model) -------------------
 def cleanup_old_conversations():
@@ -116,6 +197,9 @@ def upload_audio():
         )
         llm_reply = response["message"]["content"]
 
+        # Start TTS stream for LLM reply
+        tts_stream(llm_reply)
+
         # Append assistant reply to history
         conv["messages"].append({"role": "assistant", "content": llm_reply})
         print(f"[Chef] {llm_reply}...")
@@ -183,6 +267,9 @@ def texte_input():
         )
         llm_reply = response["message"]["content"]
 
+        # Start TTS stream for LLM reply
+        tts_stream(llm_reply)
+
         # Append assistant reply to history
         conv["messages"].append({"role": "assistant", "content": llm_reply})
         print(f"[Chef] {llm_reply}")
@@ -208,5 +295,5 @@ def health():
 
 # ------------------- RUN SERVER -------------------
 if __name__ == "__main__":
-    print(f"Server starting | Whisper: small.en | LLM: {LLM_MODEL}")
+    print(f"Server starting | Whisper: small.en | LLM: {LLM_MODEL} | Piper TTS en_US-lessac-high")
     app.run(host="0.0.0.0", port=5000, debug=False)
