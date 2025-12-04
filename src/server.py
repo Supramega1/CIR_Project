@@ -236,6 +236,21 @@ def upload_audio():
             os.remove(filepath)
         return jsonify({"error": str(e)}), 500
     
+@app.route("/upload_image", methods=["POST"])
+def upload_image():
+    # We get the image but do nothing with it for now
+    image = request.files.get("image")
+    conversation_id = request.form.get("conversation_id", "image_received")
+
+    return jsonify({
+        "ingredients": [],
+        "transcription": "🛠️ Image analysis is under construction.",
+        "llm_response": "🚧 The ingredient detection system is currently under development. Please use text or voice for now.",
+        "conversation_id": conversation_id
+    }), 200
+
+
+        
 @app.route("/texte", methods=["POST"])
 def texte_input():
     """

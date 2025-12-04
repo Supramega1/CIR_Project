@@ -35,6 +35,18 @@
     #stopBtn:hover { background: #e74c3c; }
     #stopBtn:disabled { background: #95a5a6; cursor: not-allowed;opacity: 0.7; }
 
+    #openCamera{
+      margin-top: 15px;
+      background: #b1d411;
+      color: white;
+    }
+    #openCamera:hover{background: #839e0a;}
+    #openCamera:disabled{ background: #95a5a6; cursor: not-allowed;opacity: 0.7; }
+
+    #photoAction{ background: #c0392b; color: white; }
+    #photoAction:hover { background: #e74c3c; }
+    #photoAction:disabled { background: #95a5a6; cursor: not-allowed;opacity: 0.7; }
+
     .text-input-container {
       margin: 30px 0;
       padding: 20px;
@@ -98,6 +110,21 @@
     <button id="textSubmit">Generate Recipe from Text</button>
   </div>
 
+  <!-- IMAGE INPUT MODULE -->
+  <div class="text-input-container">
+    <h3>Or take a photo of your ingredients</h3>
+
+    <video id="camera" autoplay playsinline style="width:100%; border-radius:12px; display:none;"></video>
+    <canvas id="snapshot" style="display:none;"></canvas>
+
+    <div style="margin-top:15px;text-align:center;">
+      <button id="openCamera">Open Camera</button>
+      <button id="photoAction" disabled>Take & Send Photo</button>
+    </div>
+  </div>
+
+
+
   <div class="loading" id="loading">Generating your recipe...</div>
   <div class="error" id="error"></div>
 
@@ -116,6 +143,12 @@
     const recipeEl = document.getElementById("recipe");
     const textInput = document.getElementById("textInput");
     const textSubmit = document.getElementById("textSubmit");
+    const openCameraBtn = document.getElementById("openCamera");
+    const photoActionBtn = document.getElementById("photoAction");
+    const video = document.getElementById("camera");
+    const canvas = document.getElementById("snapshot");
+
+    let cameraStream = null;
 
     let mediaRecorder;
     let audioChunks = [];
@@ -144,6 +177,8 @@
         mediaRecorder.start();
         textSubmit.disabled = true;
         startBtn.disabled = true;
+        openCameraBtn.disabled = true;
+        photoActionBtn.disabled = true;
         stopBtn.disabled = false;
         loading.style.display = "none";
         errorDiv.style.display = "none";
@@ -153,12 +188,92 @@
       }
     };
 
+    // OPEN CAMERA
+    openCameraBtn.onclick = async () => {
+      await stopTTS();
+
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = cameraStream;
+        video.style.display = "block";
+        photoActionBtn.disabled = false;
+        openCameraBtn.disabled = true;
+        textSubmit.disabled = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = true;
+      } catch (err) {
+        showError("Camera access denied.");
+      }
+    };
+
+    // TAKE + SEND PHOTO
+    photoActionBtn.onclick = async () => {
+      if (!cameraStream) return showError("Camera not started.");
+
+      loading.style.display = "block";
+      errorDiv.style.display = "none";
+      output.classList.remove("show");
+
+      // Take snapshot
+      const context = canvas.getContext("2d");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0);
+
+      // Convert to image + send
+      canvas.toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append("image", blob, "photo.jpg");
+        if (conversationId) formData.append("conversation_id", conversationId);
+
+        try {
+          const response = await fetch("/upload_image", {
+            method: "POST",
+            body: formData
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            conversationId = data.conversation_id;
+            localStorage.setItem("conversation_id", conversationId);
+
+            transcriptionEl.textContent = `Detected ingredients: ${data.ingredients.join(", ")}`;
+            recipeEl.innerHTML = markdownToHtml(data.llm_response);
+            output.classList.add("show");
+            loading.style.display = "none";
+          } else {
+            showError(data.error || "Image processing error");
+          }
+
+        } catch {
+          showError("Failed to reach YOLO server.");
+        }
+      }, "image/jpeg");
+
+      // Stop camera after sending
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+        video.style.display = "none";
+        photoActionBtn.disabled = true;
+
+        openCameraBtn.disabled = false;
+        startBtn.disabled = false;
+        textSubmit.disabled = false;
+        stopBtn.disabled = true;
+      }
+    };
+
+
     stopBtn.onclick = () => {
       if (mediaRecorder && mediaRecorder.state === "recording") {
         mediaRecorder.stop();
         startBtn.disabled = true;
         textSubmit.disabled = true;
         stopBtn.disabled = true;
+        openCameraBtn.disabled = true;
+        photoActionBtn.disabled = true;
         loading.style.display = "block";
       }
     };
@@ -188,6 +303,8 @@
       } finally {
         startBtn.disabled = false;
         textSubmit.disabled = false;
+        openCameraBtn.disabled = false;
+        photoActionBtn.disabled = true;
       }
     }
 
@@ -206,6 +323,9 @@
       startBtn.disabled = true;
       stopBtn.disabled = true;
       textSubmit.disabled = true;
+
+      openCameraBtn.disabled = true;
+      photoActionBtn.disabled = true;
 
       loading.style.display = "block";
       errorDiv.style.display = "none";
@@ -239,6 +359,8 @@
         startBtn.disabled = false;
         stopBtn.disabled = true; // stop should remain disabled until recording starts
         textSubmit.disabled = false;
+        openCameraBtn.disabled = false;
+        photoActionBtn.disabled = true;
       }
     };
 
@@ -306,6 +428,7 @@
       loading.style.display = "none";
       startBtn.disabled = false;
       textSubmit.disabled = false;
+      openCameraBtn.disabled = false;
     }
   </script>
 
