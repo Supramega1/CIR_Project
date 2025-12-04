@@ -244,14 +244,61 @@
 
     // Markdown → HTML
     function markdownToHtml(text) {
-      return text
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/^\# (.*$)/gm, '<h3>$1</h3>')
-        .replace(/^\- (.*$)/gm, '<ul><li>$1</li></ul>')
-        .replace(/^\d+\. (.*$)/gm, '<ol><li>$1</li></ol>')
-        .replace(/\n/g, '<br>');
+      const lines = text.split('\n');
+      let html = '';
+      let inUl = false;
+      let inOl = false;
+
+      for (let line of lines) {
+        line = line.trim();
+        if (!line) { 
+          // empty line → close any open lists
+          if (inUl) { html += '</ul>'; inUl = false; }
+          if (inOl) { html += '</ol>'; inOl = false; }
+          continue;
+        }
+
+        // Heading
+        if (line.startsWith('# ')) {
+          if (inUl) { html += '</ul>'; inUl = false; }
+          if (inOl) { html += '</ol>'; inOl = false; }
+          html += `<h3>${line.slice(2)}</h3>`;
+          continue;
+        }
+
+        // Unordered list
+        if (line.startsWith('- ')) {
+          if (inOl) { html += '</ol>'; inOl = false; }
+          if (!inUl) { html += '<ul>'; inUl = true; }
+          html += `<li>${line.slice(2)}</li>`;
+          continue;
+        }
+
+        // Ordered list
+        if (/^\d+\.\s/.test(line)) {
+          if (inUl) { html += '</ul>'; inUl = false; }
+          if (!inOl) { html += '<ol>'; inOl = true; }
+          html += `<li>${line.replace(/^\d+\.\s/, '')}</li>`;
+          continue;
+        }
+
+        // Paragraph
+        if (inUl) { html += '</ul>'; inUl = false; }
+        if (inOl) { html += '</ol>'; inOl = false; }
+        html += `<p>${line}</p>`;
+      }
+
+      // Close any open lists at the end
+      if (inUl) html += '</ul>';
+      if (inOl) html += '</ol>';
+
+      // Bold and italic
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+      return html;
     }
+
 
     function showError(msg) {
       errorDiv.textContent = msg;
