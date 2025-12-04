@@ -57,16 +57,38 @@ Use ALL ingredients mentioned. Be precise and professional."""
 
 app = Flask(__name__)
 
-def sanitize_text_keep_punct(text):
-    """Remove unwanted characters but keep basic punctuation."""
-    cleaned_text = re.sub(r'[^A-Za-z0-9\s.,!?]', '', text)
-    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
-    return cleaned_text.strip()
+
+def sanitize_text_add_dots(text):
+    """
+    Keep basic punctuation, normalize spaces, preserve line breaks,
+    and ensure each line ends with a dot if it doesn't already end with .!? 
+    """
+    # Split text into lines
+    lines = text.splitlines()
+    cleaned_lines = []
+
+    for line in lines:
+        # Remove unwanted characters but keep basic punctuation
+        line = re.sub(r'[^A-Za-z0-9\s.,!?-]', '', line)
+        # Normalize spaces
+        line = re.sub(r'\s+', ' ', line).strip()
+        if not line:
+            cleaned_lines.append('')  # keep blank lines
+            continue
+        # Add dot if line doesn't end with punctuation
+        if not line.endswith(('.', '!', '?')):
+            line += '.'
+        cleaned_lines.append(line)
+
+    # Rejoin lines with line breaks
+    print('\n'.join(cleaned_lines))
+    return '\n'.join(cleaned_lines)
+
 
 def tts_stream(texte: str):
     global current_thread, current_stop_event
 
-    texte = sanitize_text_keep_punct(texte)
+    texte = sanitize_text_add_dots(texte)
 
     # If a TTS is already running, stop it. It should never happen with the current design, but just in case.
     if current_thread is not None and current_thread.is_alive():
