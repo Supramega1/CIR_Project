@@ -1,12 +1,3 @@
-"""
-Flask server:
-1. Receive a .webm audio file
-2. Transcribe it with Whisper (small.en)
-3. Feed the text to Ollama (llama3.2:3b) with a chef system prompt
-4. Keep a per-conversation message history
-5. Return transcription + LLM recipe in JSON
-"""
-
 import whisper
 from flask import Flask, request, jsonify
 import os
@@ -24,6 +15,7 @@ whisper_model = whisper.load_model("small.en")
 
 # Ollama model to use for recipe generation
 LLM_MODEL = "llama3.2"          # Might change to "llama3.2:1b" or "phi3" later
+MAX_HISTORY_MESSAGES = 6  # user + bot messages to keep in context
 
 #Piper Model
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -150,24 +142,23 @@ def stop_tts():
     }), 200
 
 # ------------------- CLEANUP (We might need to change the behavior of the cleanup because we have a small model) -------------------
-def cleanup_old_conversations():
-    """Remove conversations inactive for more than 1 hour."""
-    now = datetime.now()
-    stale = [
-        cid for cid, data in CONVERSATIONS.items()
-        if (now - data["last_used"]).total_seconds() > 3600
-    ]
-    for cid in stale:
-        CONVERSATIONS.pop(cid, None)
+def trim_conversation(conv):
+    """
+    Keeps:
+    - system prompt
+    - last MAX_HISTORY_MESSAGES messages (user/assistant)
+    """
+    messages = conv["messages"]
 
-# Run cleanup every hour in the background
-threading.Thread(
-    target=lambda: [
-        cleanup_old_conversations(),
-        threading.Timer(3600, cleanup_old_conversations).start()
-    ],
-    daemon=True
-).start()
+    # Si on n'a que le system prompt → rien à faire
+    if len(messages) <= MAX_HISTORY_MESSAGES + 1:
+        return
+
+    system_msg = messages[0]
+    recent_msgs = messages[-MAX_HISTORY_MESSAGES:]
+
+    conv["messages"] = [system_msg] + recent_msgs
+    return
 
 # ------------------- MAIN ENDPOINT -------------------
 @app.route("/upload", methods=["POST"])
@@ -211,6 +202,9 @@ def upload_audio():
 
         # Append user message
         conv["messages"].append({"role": "user", "content": user_text})
+
+        # Trim conversation history if too long
+        trim_conversation(conv)
 
         # ---- 4. Call Ollama ----
         response = ollama.chat(
@@ -281,6 +275,9 @@ def texte_input():
 
         # Append user message
         conv["messages"].append({"role": "user", "content": user_text})
+
+        # Trim conversation history if too long
+        trim_conversation(conv)
 
         # ---- 2. Call Ollama ----
         response = ollama.chat(
