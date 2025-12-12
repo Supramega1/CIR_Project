@@ -1,24 +1,144 @@
 import whisper
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, url_for, redirect
 import os
 from datetime import datetime
 import ollama
 import threading
 import sounddevice as sd
 import numpy as np
+from PIL import Image
+import cv2
 from piper import PiperVoice
+from Code_YOLO.food_detection import load_model, predict_on_frame
 import re
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField
+from wtforms.validators import InputRequired, Length, ValidationError
+from flask_bcrypt import Bcrypt
+
+# ------------------- Database -------------------
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SECRET_KEY'] = 'thisisasecretkey'
+db = SQLAlchemy(app)
+bcrypt = Bcrypt(app)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+
+class User(db.Model, UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(20), nullable=False, unique=True)
+    password = db.Column(db.String(80), nullable=False)
+
+
+class RegisterForm(FlaskForm):
+    username = StringField(validators=[
+                           InputRequired(), Length(min=1, max=20)], render_kw={"placeholder": "Username"})
+
+    password = PasswordField(validators=[
+                             InputRequired(), Length(min=8, max=20)], render_kw={"placeholder": "Password"})
+    
+    repeat_password = PasswordField(validators=[
+                             InputRequired(), Length(min=8, max=20)], render_kw={"placeholder": "Repeat Password"})
+
+    submit = SubmitField('Register')
+
+    def validate_username(self, username):
+        existing_user_username = User.query.filter_by(
+            username=username.data).first()
+        if existing_user_username:
+            raise ValidationError(
+                'That username already exists. Please choose a different one.')
+        
+    def validate_repeat_password(self, repeat_password):
+        if repeat_password.data != self.password.data:
+            raise ValidationError(
+                'Passwords do not match. Please try again.')
+
+
+class LoginForm(FlaskForm):
+    username = StringField(validators=[
+                           InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "Username"})
+
+    password = PasswordField(validators=[
+                             InputRequired(), Length(min=8, max=20)], render_kw={"placeholder": "Password"})
+
+    submit = SubmitField('Login')
+
+
+@app.route('/')
+def home_login():
+    return render_template('login.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(username=form.username.data).first()
+        if user:
+            if bcrypt.check_password_hash(user.password, form.password.data):
+                login_user(user)
+                return redirect(url_for('index'))
+    return render_template('login.html', form=form)
+
+
+@app.route('/index', methods=['GET', 'POST'])
+@login_required
+def index():
+    return render_template('index.html')
+
+
+@app.route('/logout', methods=['GET', 'POST'])
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+
+@ app.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegisterForm()
+
+    if form.validate_on_submit():
+        hashed_password = bcrypt.generate_password_hash(form.password.data)
+        new_user = User(username=form.username.data, password=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
+        login_user(new_user)
+        return redirect(url_for('index'))
+
+    return render_template('register.html', form=form)
+
+
 
 # ------------------- CONFIG -------------------
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Whisper model (English-only, fast on CPU/GPU)
 whisper_model = whisper.load_model("small.en")
+
+#Yolo Model for ingredient detection 
+MODEL_PATH_YOLO = os.path.join(SCRIPT_DIR, "Code_YOLO" , "models" , "yolo16c.pt")
+yolo_model = load_model(model_path=MODEL_PATH_YOLO)
 
 # Ollama model to use for recipe generation
 LLM_MODEL = "llama3.2"          # Might change to "llama3.2:1b" or "phi3" later
 MAX_HISTORY_MESSAGES = 6  # user + bot messages to keep in context
 
 #Piper Model
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(SCRIPT_DIR, "en_US-lessac-high.onnx")
 voice = PiperVoice.load(MODEL_PATH, use_cuda=True)
 current_thread = None
@@ -47,7 +167,6 @@ The recipe must include:
 Use ALL ingredients mentioned. Be precise and professional."""
 }
 
-app = Flask(__name__)
 
 
 def sanitize_text_add_dots(text):
@@ -240,14 +359,96 @@ def upload_audio():
 def upload_image():
     # We get the image but do nothing with it for now
     image = request.files.get("image")
-    conversation_id = request.form.get("conversation_id", "image_received")
 
-    return jsonify({
-        "ingredients": [],
-        "transcription": "🛠️ Image analysis is under construction.",
-        "llm_response": "🚧 The ingredient detection system is currently under development. Please use text or voice for now.",
-        "conversation_id": conversation_id
-    }), 200
+    # STARTING TO BUILD
+
+    temp_path = os.path.join(UPLOAD_FOLDER, "temp_image.jpg")
+    image.save(temp_path)
+
+    img = cv2.imread(temp_path)
+
+    if img is None:
+        # Fallback with PIL
+        try:
+            pil_img = Image.open(temp_path).convert("RGB")
+            img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            print(f"Failed to load image: {temp_path} ({e})")
+            return jsonify({"Failed to load image": str(e)}), 500
+        
+
+    result = predict_on_frame(model=yolo_model, frame=img)
+
+    os.remove(temp_path)
+
+    # Get the list of class IDs predicted
+    class_ids = result.boxes.cls.tolist()  # Convert tensor → Python list
+
+    # Convert class IDs to class names
+    detected_names = [yolo_model.names[int(c)] for c in class_ids]
+
+    unique_ingredients = list(set(detected_names))
+
+    if unique_ingredients:
+        ingredients_str = ", ".join(unique_ingredients)
+        user_text = f"Make me a recipe using: {ingredients_str}, please!"
+    else:
+        user_text = "No ingredients detected in the image. Notify the user ( me )."
+
+
+
+    # END OF BUILDING
+
+
+    # Use provided ID or generate a new one
+    conversation_id = request.form.get(
+        "conversation_id",
+        datetime.now().strftime("%Y%m%d_%H%M%S")
+    )
+
+    print(f"[User TEXT] {user_text}")
+
+    try:
+        # ---- 1. Initialise / retrieve conversation ----
+        if conversation_id not in CONVERSATIONS:
+            CONVERSATIONS[conversation_id] = {
+                "messages": [SYSTEM_PROMPT],
+                "last_used": datetime.now()
+            }
+
+        conv = CONVERSATIONS[conversation_id]
+        conv["last_used"] = datetime.now()
+
+        # Append user message
+        conv["messages"].append({"role": "user", "content": user_text})
+
+        # Trim conversation history if too long
+        trim_conversation(conv)
+
+        # ---- 2. Call Ollama ----
+        response = ollama.chat(
+            model=LLM_MODEL,
+            messages=conv["messages"]
+        )
+        llm_reply = response["message"]["content"]
+
+        # Start TTS stream for LLM reply
+        tts_stream(llm_reply)
+
+        # Append assistant reply to history
+        conv["messages"].append({"role": "assistant", "content": llm_reply})
+        print(f"[Chef] {llm_reply}")
+
+        # ---- 3. Return JSON ----
+        return jsonify({
+            "transcription": user_text,
+            "ingredients": unique_ingredients, 
+            "llm_response": llm_reply,
+            "conversation_id": conversation_id
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
         
@@ -329,5 +530,9 @@ def health():
 
 # ------------------- RUN SERVER -------------------
 if __name__ == "__main__":
+    print("Checking database...")
+    with app.app_context():
+        db.create_all()   # creates tables only if they don't exist
+        print("Database ready.")
     print(f"Server starting | Whisper: small.en | LLM: {LLM_MODEL} | Piper TTS en_US-lessac-high")
     app.run(host="0.0.0.0", port=5000, debug=False)
