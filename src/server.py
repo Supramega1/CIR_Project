@@ -14,7 +14,7 @@ import re
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField
+from wtforms import StringField, PasswordField, SubmitField, SelectField
 from wtforms.validators import InputRequired, Length, ValidationError
 from flask_bcrypt import Bcrypt
 
@@ -68,12 +68,9 @@ class RegisterForm(FlaskForm):
 
 
 class LoginForm(FlaskForm):
-    username = StringField(validators=[
-                           InputRequired(), Length(min=1, max=20)], render_kw={"placeholder": "Username"})
-
+    username = SelectField('Username', validators=[InputRequired()], coerce=str)
     password = PasswordField(validators=[
                              InputRequired(), Length(min=1, max=20)], render_kw={"placeholder": "Password"})
-
     submit = SubmitField('Login')
 
 
@@ -85,6 +82,19 @@ def home_login():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
+    
+    # Get all usernames from the database
+    all_users = User.query.with_entities(User.username).all()
+    # Create choices list for SelectField
+    user_choices = [(user.username, user.username) for user in all_users]
+    
+    # If no users exist, add a placeholder choice
+    if not user_choices:
+        user_choices = [('', 'No users available - Please register first')]
+    
+    # Assigner les choix au champ username
+    form.username.choices = user_choices
+    
     if request.method == 'POST':
         if form.validate_on_submit():
             user = User.query.filter_by(username=form.username.data).first()

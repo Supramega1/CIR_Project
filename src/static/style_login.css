@@ -21,18 +21,14 @@ body{
   background-size: cover;
   background-position: center;
   overflow: hidden;
-  /* Ajout pour centrer la boîte */
   display: flex;
   justify-content: center;
   align-items: center;
 }
 .wrapper{
   box-sizing: border-box;
-  /* Changement : rgba au lieu de var(--base-color) pour la transparence */
   background-color: rgba(255, 255, 255, 0.7);
-  /* Ajout d'un effet de flou sur l'arrière-plan (optionnel mais joli) */
-  /*backdrop-filter: blur(10px);
-  /* Changement : height auto au lieu de 100vh */
+  /*backdrop-filter: blur(10px);*/
   height: auto;
   min-height: 500px;
   width: max(40%, 600px);
@@ -76,7 +72,10 @@ form label{
   font-size: 1.5rem;
   font-weight: 500;
 }
-form input{
+
+/* Style for inputs and selects */
+form input,
+form select{
   box-sizing: border-box;
   flex-grow: 1;
   min-width: 0;
@@ -88,20 +87,44 @@ form input{
   border-left: none;
   background-color: var(--input-color);
   transition: 150ms ease;
+  cursor: pointer;
 }
-form input:hover{
+
+form input:hover,
+form select:hover{
   border-color: var(--accent-color);
 }
-form input:focus{
+
+form input:focus,
+form select:focus{
   outline: none;
   border-color: var(--text-color);
 }
-div:has(input:focus) > label{
+
+div:has(input:focus) > label,
+div:has(select:focus) > label{
   background-color: var(--text-color);
 }
+
 form input::placeholder{
   color: var(--text-color);
 }
+
+/* Style for select */
+form select{
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%232E2B41' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1em center;
+  padding-right: 2.5em;
+}
+
+form select option{
+  background-color: var(--base-color);
+  color: var(--text-color);
+  padding: 10px;
+}
+
 form button{
   margin-top: 10px;
   border: none;
@@ -138,7 +161,8 @@ a:hover{
 form div.incorrect label{
   background-color: #f06272;
 }
-form div.incorrect input{
+form div.incorrect input,
+form div.incorrect select{
   border-color: #f06272;
 }
 #error-message{
