@@ -72,7 +72,7 @@ class LoginForm(FlaskForm):
                            InputRequired(), Length(min=1, max=20)], render_kw={"placeholder": "Username"})
 
     password = PasswordField(validators=[
-                             InputRequired(), Length(min=8, max=20)], render_kw={"placeholder": "Password"})
+                             InputRequired(), Length(min=1, max=20)], render_kw={"placeholder": "Password"})
 
     submit = SubmitField('Login')
 
@@ -104,14 +104,7 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/logout', methods=['GET', 'POST'])
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
-
-
-@ app.route('/register', methods=['GET', 'POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegisterForm()
 
@@ -157,7 +150,13 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 #   value = {"messages": [...], "last_used": datetime}
 CONVERSATIONS = {}
 
-# System prompt – defines the LLM persona
+# Track active operations per user
+USER_OPERATIONS = {}  # {user_id: {"tts_thread": thread, "tts_stop_event": event, "conversation_id": conv_id}}
+
+# Track active users (users currently logged in)
+ACTIVE_USERS = set()  # {user_id, user_id, ...}
+
+# System prompt — defines the LLM persona
 SYSTEM_PROMPT = {
     "role": "system",
     "content": """You are YUMEYE, a creative English-speaking chef.
@@ -200,8 +199,18 @@ def sanitize_text_add_dots(text):
     return '\n'.join(cleaned_lines)
 
 
-def tts_stream(texte: str):
+def tts_stream(texte: str, user_id: int = None):
+    """
+    Stream TTS audio for a given text.
+    If user_id is provided, track the operation for cleanup on logout.
+    IMPORTANT: Check if user is still active before starting TTS.
+    """
     global current_thread, current_stop_event
+
+    # Check if user is still logged in
+    if user_id and user_id not in ACTIVE_USERS:
+        print(f"User {user_id} is no longer active. Skipping TTS.")
+        return None
 
     texte = sanitize_text_add_dots(texte)
 
@@ -244,7 +253,50 @@ def tts_stream(texte: str):
     thread = threading.Thread(target=worker)
     current_thread = thread
     thread.start()
+    
+    # Track per-user if user_id provided
+    if user_id:
+        if user_id not in USER_OPERATIONS:
+            USER_OPERATIONS[user_id] = {}
+        USER_OPERATIONS[user_id]["tts_thread"] = thread
+        USER_OPERATIONS[user_id]["tts_stop_event"] = stop_event
+    
     return None
+
+
+def cleanup_user_operations(user_id: int):
+    """
+    Stop all active operations for a user (TTS, recordings, etc.)
+    """
+    # Remove from active users
+    ACTIVE_USERS.discard(user_id)
+    
+    if user_id not in USER_OPERATIONS:
+        return
+    
+    user_ops = USER_OPERATIONS[user_id]
+    
+    # Stop TTS if running
+    if "tts_stop_event" in user_ops and "tts_thread" in user_ops:
+        thread = user_ops["tts_thread"]
+        stop_event = user_ops["tts_stop_event"]
+        
+        if thread and thread.is_alive():
+            print(f"Stopping TTS for user {user_id}")
+            stop_event.set()
+            thread.join(timeout=2)  # Wait max 2 seconds
+    
+    # Clear conversation history
+    if "conversation_id" in user_ops:
+        conv_id = user_ops["conversation_id"]
+        if conv_id in CONVERSATIONS:
+            print(f"Clearing conversation {conv_id} for user {user_id}")
+            del CONVERSATIONS[conv_id]
+    
+    # Remove user from tracking
+    del USER_OPERATIONS[user_id]
+    print(f"Cleaned up operations for user {user_id}")
+
 
 @app.route("/stop_tts", methods=["GET"])
 def stop_tts():
@@ -285,6 +337,7 @@ def trim_conversation(conv):
 
 # ------------------- MAIN ENDPOINT -------------------
 @app.route("/upload", methods=["POST"])
+@login_required
 def upload_audio():
     """
     Expected multipart/form-data:
@@ -306,6 +359,11 @@ def upload_audio():
     filename = f"{conversation_id}.webm"
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     audio_file.save(filepath)
+
+    # Get user_id before processing
+    user_id = current_user.id
+    # Mark user as active
+    ACTIVE_USERS.add(user_id)
 
     try:
         # ---- 2. Transcribe with Whisper ----
@@ -336,8 +394,17 @@ def upload_audio():
         )
         llm_reply = response["message"]["content"]
 
-        # Start TTS stream for LLM reply
-        tts_stream(llm_reply)
+        # Check if user is still active before starting TTS
+        if user_id in ACTIVE_USERS:
+            # Start TTS stream for LLM reply with user tracking
+            tts_stream(llm_reply, user_id=user_id)
+            
+            # Track conversation for this user
+            if user_id not in USER_OPERATIONS:
+                USER_OPERATIONS[user_id] = {}
+            USER_OPERATIONS[user_id]["conversation_id"] = conversation_id
+        else:
+            print(f"User {user_id} logged out during processing. Skipping TTS.")
 
         # Append assistant reply to history
         conv["messages"].append({"role": "assistant", "content": llm_reply})
@@ -360,6 +427,7 @@ def upload_audio():
         return jsonify({"error": str(e)}), 500
     
 @app.route("/upload_image", methods=["POST"])
+@login_required
 def upload_image():
     # We get the image but do nothing with it for now
     image = request.files.get("image")
@@ -399,10 +467,7 @@ def upload_image():
     else:
         user_text = "No ingredients detected in the image. Notify the user ( me )."
 
-
-
     # END OF BUILDING
-
 
     # Use provided ID or generate a new one
     conversation_id = request.form.get(
@@ -411,6 +476,11 @@ def upload_image():
     )
 
     print(f"[User TEXT] {user_text}")
+
+    # Get user_id before processing
+    user_id = current_user.id
+    # Mark user as active
+    ACTIVE_USERS.add(user_id)
 
     try:
         # ---- 1. Initialise / retrieve conversation ----
@@ -436,8 +506,17 @@ def upload_image():
         )
         llm_reply = response["message"]["content"]
 
-        # Start TTS stream for LLM reply
-        tts_stream(llm_reply)
+        # Check if user is still active before starting TTS
+        if user_id in ACTIVE_USERS:
+            # Start TTS stream for LLM reply with user tracking
+            tts_stream(llm_reply, user_id=user_id)
+            
+            # Track conversation for this user
+            if user_id not in USER_OPERATIONS:
+                USER_OPERATIONS[user_id] = {}
+            USER_OPERATIONS[user_id]["conversation_id"] = conversation_id
+        else:
+            print(f"User {user_id} logged out during processing. Skipping TTS.")
 
         # Append assistant reply to history
         conv["messages"].append({"role": "assistant", "content": llm_reply})
@@ -457,6 +536,7 @@ def upload_image():
 
         
 @app.route("/texte", methods=["POST"])
+@login_required
 def texte_input():
     """
     Expected JSON:
@@ -482,6 +562,11 @@ def texte_input():
 
     print(f"[User TEXT] {user_text}")
 
+    # Get user_id before processing
+    user_id = current_user.id
+    # Mark user as active
+    ACTIVE_USERS.add(user_id)
+
     try:
         # ---- 1. Initialise / retrieve conversation ----
         if conversation_id not in CONVERSATIONS:
@@ -506,8 +591,17 @@ def texte_input():
         )
         llm_reply = response["message"]["content"]
 
-        # Start TTS stream for LLM reply
-        tts_stream(llm_reply)
+        # Check if user is still active before starting TTS
+        if user_id in ACTIVE_USERS:
+            # Start TTS stream for LLM reply with user tracking
+            tts_stream(llm_reply, user_id=user_id)
+            
+            # Track conversation for this user
+            if user_id not in USER_OPERATIONS:
+                USER_OPERATIONS[user_id] = {}
+            USER_OPERATIONS[user_id]["conversation_id"] = conversation_id
+        else:
+            print(f"User {user_id} logged out during processing. Skipping TTS.")
 
         # Append assistant reply to history
         conv["messages"].append({"role": "assistant", "content": llm_reply})
@@ -523,13 +617,29 @@ def texte_input():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/logout', methods=['GET', 'POST'])
+@login_required
+def logout():
+    user_id = current_user.id
+    
+    # Clean up all active operations for this user
+    cleanup_user_operations(user_id)
+    
+    # Log out the user
+    logout_user()
+    
+    return redirect(url_for('login'))
+
+
 # ------------------- HEALTH CHECK -------------------
 @app.route("/health")
 def health():
     """Simple health endpoint for monitoring."""
     return jsonify({
         "status": "ok",
-        "active_conversations": len(CONVERSATIONS)
+        "active_conversations": len(CONVERSATIONS),
+        "active_users": len(ACTIVE_USERS)
     })
 
 # ------------------- RUN SERVER -------------------
@@ -539,4 +649,4 @@ if __name__ == "__main__":
         db.create_all()   # creates tables only if they don't exist
         print("Database ready.")
     print(f"Server starting | Whisper: small.en | LLM: {LLM_MODEL} | Piper TTS en_US-lessac-high")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=True)

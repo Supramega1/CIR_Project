@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 :root{
-  --accent-color: #8672FF;
+  --accent-color: #2810af;
   --base-color: white;
   --text-color: #2E2B41;
   --input-color: #F3F0FF;
@@ -17,18 +17,27 @@ html{
 }
 body{
   min-height: 100vh;
-  background-image: url(background.jpg);
+  background-image: url(background_register.png);
   background-size: cover;
-  background-position: right;
+  background-position: center;
   overflow: hidden;
+  /* Ajout pour centrer la boîte */
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 .wrapper{
   box-sizing: border-box;
-  background-color: var(--base-color);
-  height: 100vh;
+  /* ✅ Changement : rgba au lieu de var(--base-color) pour la transparence */
+  background-color: rgba(255, 255, 255, 0.7);
+  /* Ajout d'un effet de flou sur l'arrière-plan (optionnel mais joli) */
+  /*backdrop-filter: blur(10px);
+  /* Changement : height auto au lieu de 100vh */
+  height: auto;
+  min-height: 500px;
   width: max(40%, 600px);
-  padding: 10px;
-  border-radius: 0 20px 20px 0;
+  padding: 60px 10px;
+  border-radius: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -123,7 +132,7 @@ a:hover{
 @media(max-width: 1100px){
   .wrapper{
     width: min(600px, 100%);
-    border-radius: 0;
+    border-radius: 20px;
   }
 }
 form div.incorrect label{
