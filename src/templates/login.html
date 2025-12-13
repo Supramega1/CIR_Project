@@ -5,13 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login</title>
   <link rel="stylesheet" href="../static/style.css">
+  <!-- ✅ Validation js now usable for client -->
   <script type="text/javascript" src="../static/validation.js" defer></script>
 </head>
 <body>
   <div class="wrapper">
     <h1>Login</h1>
-    <p id="error-message"></p>
-    <form method="POST" action="">
+    
+    <!-- Error printing  -->
+    <p id="error-message" style="color: red; min-height: 20px;">
+      {% if form.errors %}
+        {% for field, messages in form.errors.items() %}
+          {% for message in messages %}
+            {{ message }}<br>
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+    </p>
+
+    <!-- ✅ Adding id="form" -->
+    <form id="form" method="POST" action="">
       {{ form.hidden_tag() }}
       <div>
         <label for="username">
@@ -25,7 +38,7 @@
         </label>
         {{ form.password(id="password-input", placeholder="Password") }}
       </div>
-      {{ form.submit() }}  <!-- This will display "Login" automatically -->
+      {{ form.submit() }}
     </form>
     <p>New here? <a href="{{ url_for('register') }}">Create an Account</a></p>
   </div>

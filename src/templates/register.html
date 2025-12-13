@@ -10,7 +10,18 @@
 <body>
   <div class="wrapper">
     <h1>Signup</h1>
-    <p id="error-message"></p>
+    
+    <!-- We can see server error (WTForms) + client (JS) -->
+    <p id="error-message" style="color: red; min-height: 20px;">
+      {% if form.errors %}
+        {% for field, messages in form.errors.items() %}
+          {% for message in messages %}
+            {{ message }}<br>
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+    </p>
+
     <form method="POST" action="">
       {{ form.hidden_tag() }}
       <div>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Yumeye – Voice Recipe Generator</title>
+  <title>Yumeye — Recipe Generator</title>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -14,6 +14,27 @@
       color: #333;
     }
     h1 { text-align: center; color: #d35400; }
+    
+    /* Logout button in top right corner */
+    .logout-container {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+    }
+    #logoutBtn {
+      padding: 10px 20px;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s;
+      background: #e74c3c;
+      color: white;
+    }
+    #logoutBtn:hover {
+      background: #c0392b;
+    }
+
     .controls { text-align: center; margin: 30px 0; }
     button {
       padding: 12px 24px;
@@ -95,6 +116,11 @@
 </head>
 <body>
 
+  <!-- Logout Button -->
+  <div class="logout-container">
+    <button id="logoutBtn">Log Out</button>
+  </div>
+
   <h1>Yumeye</h1>
   <p style="text-align:center; color:#7f8c8d;">Speak your ingredients → Get a pro recipe</p>
 
@@ -147,12 +173,30 @@
     const photoActionBtn = document.getElementById("photoAction");
     const video = document.getElementById("camera");
     const canvas = document.getElementById("snapshot");
+    const logoutBtn = document.getElementById("logoutBtn");
 
     let cameraStream = null;
 
     let mediaRecorder;
     let audioChunks = [];
     let conversationId = localStorage.getItem("conversation_id") || null;
+
+    // LOGOUT HANDLER
+    logoutBtn.onclick = async () => {
+      try {
+        const response = await fetch("/logout", { method: "POST" });
+        if (response.ok) {
+          // Clear conversation ID from localStorage
+          localStorage.removeItem("conversation_id");
+          // Redirect to login page
+          window.location.href = "/login";
+        } else {
+          showError("Failed to log out. Please try again.");
+        }
+      } catch (err) {
+        showError("Network error during logout.");
+      }
+    };
 
     async function stopTTS() {
       try {
