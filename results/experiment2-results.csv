@@ -1,0 +1,19 @@
+Modality;Task completion time (s);Error count;How mentally demanding?;How physically demanding?;How hurried or rushed?;How successful?;How hard to work?;How insecure/stressed?;Like to use frequently (1-5);Unnecessarily complex (1-5);Easy to use (1-5);Need tech support (1-5);Well integrated (1-5);Too much inconsistency (1-5);Learn quickly (1-5);Very cumbersome (1-5);Felt confident (1-5);Need to learn a lot (1-5)
+Voice;40;1;4;1;2;9;3;2;5;1;5;1;5;2;5;1;5;1
+Voice;46;3;5;1;3;8;4;3;4;2;4;2;4;2;4;2;4;2
+Voice;34;1;3;1;2;10;2;1;5;1;5;1;5;1;5;1;5;1
+Voice;32;3;6;1;4;7;5;4;5;2;3;2;4;3;4;2;3;2
+Voice;38;1;4;1;2;9;3;1;5;1;5;1;5;1;5;1;5;1
+Voice;44;2;4;1;3;8;3;2;5;1;4;1;5;1;5;1;4;1
+Text;34;1;4;5;2;10;5;2;5;1;4;1;4;1;5;3;5;1
+Text;46;0;3;4;2;9;4;1;5;2;5;1;4;1;5;2;5;1
+Text;40;1;5;6;3;9;5;2;4;2;3;1;3;1;4;4;4;1
+Text;24;0;3;4;2;10;3;1;5;1;5;1;4;1;5;2;5;1
+Text;36;1;4;5;3;9;4;2;4;2;4;1;3;1;5;3;4;1
+Text;32;0;3;4;2;10;4;1;5;2;5;1;4;1;5;2;5;1
+Image;20;1;3;1;2;9;2;1;4;1;5;1;5;1;5;1;5;1
+Image;26;1;4;1;3;8;3;2;4;1;4;1;5;2;5;1;4;2
+Image;16;0;2;1;1;10;1;1;4;1;5;1;5;1;5;1;5;1
+Image;24;2;3;1;2;8;2;3;3;2;5;1;4;2;4;1;4;1
+Image;19;1;3;1;2;9;2;1;4;1;5;1;5;1;5;1;5;1
+Image;28;1;4;1;3;8;3;2;4;1;4;1;5;1;5;1;4;1
