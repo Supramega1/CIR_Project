@@ -119,14 +119,22 @@
 <body>
 
 <!-- Top-right navigation buttons -->
-  <div style="position: absolute; top: 20px; right: 140px;">
+  <div style="position: absolute; top: 20px; right: 260px;">
     <a href="{{ url_for('profile') }}"
-       style="display: inline-block; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; text-decoration: none;">
+       style="display: inline-block; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; text-decoration: none; margin-right: 10px;">
       Edit Profile
     </a>
   </div>
 
-  <!-- Logout Button -->
+  <!-- TTS Toggle Button -->
+  <div style="position: absolute; top: 20px; right: 140px;">
+    <button id="ttsToggleBtn"
+            style="padding: 10px 20px; background: #f39c12; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
+      Mute Voice
+    </button>
+  </div>
+
+  <!-- Logout Button (existing) -->
   <div class="logout-container">
     <button id="logoutBtn">Log Out</button>
   </div>
@@ -186,6 +194,42 @@
     const video = document.getElementById("camera");
     const canvas = document.getElementById("snapshot");
     const logoutBtn = document.getElementById("logoutBtn");
+    // TTS Toggle Button
+    const ttsToggleBtn = document.getElementById("ttsToggleBtn");
+
+    async function updateTTSButton() {
+      // On page load (and after toggle), set correct text
+      // We assume it starts enabled; you could fetch initial state if needed
+      if (localStorage.getItem('tts_enabled') === 'false') {
+        ttsToggleBtn.textContent = 'Unmute Voice';
+        ttsToggleBtn.style.background = '#27ae60';  // Green when muted (ready to unmute)
+      } else {
+        ttsToggleBtn.textContent = 'Mute Voice';
+        ttsToggleBtn.style.background = '#f39c12';  // Orange when unmuted
+      }
+    }
+
+    ttsToggleBtn.onclick = async () => {
+      try {
+        const response = await fetch("/toggle_tts", { method: "POST" });
+        const data = await response.json();
+        
+        if (data.status === "success") {
+          localStorage.setItem('tts_enabled', data.enabled.toString());
+          updateTTSButton();
+          
+          // Optional: instantly stop any currently playing TTS
+          if (!data.enabled) {
+            await fetch("/stop_tts", { method: "GET" });
+          }
+        }
+      } catch (err) {
+        alert("Failed to toggle voice. Try again.");
+      }
+    };
+
+    // Initial button state on page load
+    updateTTSButton();
 
     let cameraStream = null;
 

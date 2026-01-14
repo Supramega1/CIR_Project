@@ -50,6 +50,7 @@ class User(db.Model, UserMixin):
     default_servings = db.Column(db.Integer, nullable=True)              # default handled in code
     skill_level = db.Column(db.String(20), nullable=True)                # "beginner", "intermediate", "advanced"
     measurement_preference = db.Column(db.String(10), nullable=True)     # "US" or "metric"
+    tts_enabled = db.Column(db.Boolean, default=True, nullable=False)    # Allow the user to mute the tts
 
 
 class RegisterForm(FlaskForm):
@@ -541,7 +542,8 @@ def upload_audio():
         # Check if user is still active before starting TTS
         if user_id in ACTIVE_USERS:
             # Start TTS stream for LLM reply with user tracking
-            tts_stream(llm_reply, user_id=user_id)
+            if current_user.tts_enabled:
+                tts_stream(llm_reply, user_id=user_id)
             
             # Track conversation for this user
             if user_id not in USER_OPERATIONS:
@@ -656,7 +658,8 @@ def upload_image():
         # Check if user is still active before starting TTS
         if user_id in ACTIVE_USERS:
             # Start TTS stream for LLM reply with user tracking
-            tts_stream(llm_reply, user_id=user_id)
+            if current_user.tts_enabled:
+                tts_stream(llm_reply, user_id=user_id)
             
             # Track conversation for this user
             if user_id not in USER_OPERATIONS:
@@ -744,7 +747,8 @@ def texte_input():
         # Check if user is still active before starting TTS
         if user_id in ACTIVE_USERS:
             # Start TTS stream for LLM reply with user tracking
-            tts_stream(llm_reply, user_id=user_id)
+            if current_user.tts_enabled:
+                tts_stream(llm_reply, user_id=user_id)
             
             # Track conversation for this user
             if user_id not in USER_OPERATIONS:
@@ -780,6 +784,16 @@ def logout():
     logout_user()
     
     return redirect(url_for('login'))
+
+@app.route("/toggle_tts", methods=["POST"])
+@login_required
+def toggle_tts():
+    current_user.tts_enabled = not current_user.tts_enabled
+    db.session.commit()
+    return jsonify({
+        "enabled": current_user.tts_enabled,
+        "status": "success"
+    })
 
 
 # ------------------- HEALTH CHECK -------------------
