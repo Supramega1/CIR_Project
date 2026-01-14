@@ -14,11 +14,11 @@ import re
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, SelectField
-from wtforms.validators import InputRequired, Length, ValidationError
+from wtforms import StringField, PasswordField, SubmitField, SelectField, TextAreaField, IntegerField
+from wtforms.validators import InputRequired, Length, ValidationError, Optional, NumberRange
 from flask_bcrypt import Bcrypt
 
-# ------------------- Database -------------------
+# ------------------- Database configuration -------------------
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
@@ -40,6 +40,16 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), nullable=False, unique=True)
     password = db.Column(db.String(80), nullable=False)
+
+    # PERSONALIZATION FIELDS
+    dietary_restrictions = db.Column(db.String(200), nullable=True)      # e.g. "vegetarian, gluten-free"
+    allergies = db.Column(db.String(200), nullable=True)                 # e.g. "peanuts, shellfish"
+    disliked_ingredients = db.Column(db.String(200), nullable=True)      # e.g. "cilantro, olives"
+    favorite_cuisines = db.Column(db.String(200), nullable=True)         # e.g. "Italian, Mexican"
+    spice_level = db.Column(db.String(20), nullable=True)                # "mild", "medium", etc.
+    default_servings = db.Column(db.Integer, nullable=True)              # default handled in code
+    skill_level = db.Column(db.String(20), nullable=True)                # "beginner", "intermediate", "advanced"
+    measurement_preference = db.Column(db.String(10), nullable=True)     # "US" or "metric"
 
 
 class RegisterForm(FlaskForm):
@@ -72,6 +82,59 @@ class LoginForm(FlaskForm):
     password = PasswordField(validators=[
                              InputRequired(), Length(min=1, max=20)], render_kw={"placeholder": "Password"})
     submit = SubmitField('Login')
+
+
+class ProfileForm(FlaskForm):
+    dietary_restrictions = TextAreaField(
+        'Dietary Restrictions',
+        render_kw={"placeholder": "e.g. vegetarian, gluten-free, vegan (comma-separated)"}
+    )
+    allergies = TextAreaField(
+        'Allergies',
+        render_kw={"placeholder": "e.g. peanuts, shellfish, dairy (comma-separated)"}
+    )
+    disliked_ingredients = TextAreaField(
+        'Disliked Ingredients',
+        render_kw={"placeholder": "e.g. cilantro, mushrooms, olives (comma-separated)"}
+    )
+    favorite_cuisines = TextAreaField(
+        'Favorite Cuisines',
+        render_kw={"placeholder": "e.g. Italian, Mexican, Thai (comma-separated)"}
+    )
+    spice_level = SelectField(
+        'Spice Preference',
+        choices=[
+            ('none', 'No spice'),
+            ('mild', 'Mild'),
+            ('medium', 'Medium'),
+            ('spicy', 'Spicy'),
+            ('very spicy', 'Very spicy')
+        ],
+        default='medium'
+    )
+    default_servings = IntegerField(
+        'Default Number of Servings',
+        validators=[Optional(), NumberRange(min=1, max=20)],
+        default=4
+    )
+    skill_level = SelectField(
+        'Cooking Skill Level',
+        choices=[
+            ('beginner', 'Beginner'),
+            ('intermediate', 'Intermediate'),
+            ('advanced', 'Advanced')
+        ],
+        default='intermediate'
+    )
+    measurement_preference = SelectField(
+        'Measurement Units',
+        choices=[
+            ('US', 'US customary (cups, oz, etc.)'),
+            ('metric', 'Metric (grams, ml, etc.)')
+        ],
+        default='US'
+    )
+    submit = SubmitField('Save Profile')
 
 
 @app.route('/')
@@ -124,9 +187,42 @@ def register():
         db.session.add(new_user)
         db.session.commit()
         login_user(new_user)
-        return redirect(url_for('index'))
+        return redirect(url_for('profile'))  # ← Redirect new users to profile setup
 
     return render_template('register.html', form=form)
+
+
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    form = ProfileForm()
+
+    if request.method == 'GET':
+        # Pre-fill form with current user data (or defaults)
+        form.dietary_restrictions.data = current_user.dietary_restrictions or ''
+        form.allergies.data = current_user.allergies or ''
+        form.disliked_ingredients.data = current_user.disliked_ingredients or ''
+        form.favorite_cuisines.data = current_user.favorite_cuisines or ''
+        form.spice_level.data = current_user.spice_level or 'medium'
+        form.default_servings.data = current_user.default_servings or 4
+        form.skill_level.data = current_user.skill_level or 'intermediate'
+        form.measurement_preference.data = current_user.measurement_preference or 'US'
+
+    if form.validate_on_submit():
+        # Save updated values (empty strings → None)
+        current_user.dietary_restrictions = form.dietary_restrictions.data.strip() or None
+        current_user.allergies = form.allergies.data.strip() or None
+        current_user.disliked_ingredients = form.disliked_ingredients.data.strip() or None
+        current_user.favorite_cuisines = form.favorite_cuisines.data.strip() or None
+        current_user.spice_level = form.spice_level.data
+        current_user.default_servings = form.default_servings.data
+        current_user.skill_level = form.skill_level.data
+        current_user.measurement_preference = form.measurement_preference.data
+
+        db.session.commit()
+        return redirect(url_for('index'))
+
+    return render_template('profile.html', form=form)
 
 
 
@@ -167,20 +263,63 @@ USER_OPERATIONS = {}  # {user_id: {"tts_thread": thread, "tts_stop_event": event
 ACTIVE_USERS = set()  # {user_id, user_id, ...}
 
 # System prompt — defines the LLM persona
-SYSTEM_PROMPT = {
-    "role": "system",
-    "content": """You are YUMEYE, a creative English-speaking chef.
-Generate ONLY one detailed recipe in English witht the ingredients provided by the user.
-The recipe must include:
+# SYSTEM_PROMPT = {
+#     "role": "system",
+#     "content": """You are YUMEYE, a creative English-speaking chef.
+# Generate ONLY one detailed recipe in English witht the ingredients provided by the user.
+# The recipe must include:
+# - Title
+# - Ingredients with US measurements (1 ½ cups, 2 tsp, 6 oz…)
+# - Numbered steps
+# - Prep + cook time
+# - 1 fun tip
+# Use ALL ingredients mentioned. Be precise and professional."""
+# }
+
+def build_system_prompt(user):
+    """Build a personalized system prompt based on the current user's profile."""
+    restrictions = user.dietary_restrictions or "none specified"
+    allergies = user.allergies or "none specified"
+    disliked = user.disliked_ingredients or "none specified"
+    cuisines = user.favorite_cuisines or "various"
+    spice = user.spice_level or "medium"
+    servings = user.default_servings or 4
+    skill = user.skill_level or "intermediate"
+    units_desc = "US customary (cups, tsp, oz, etc.)" if (user.measurement_preference or "US") == "US" else "metric (grams, ml, etc.)"
+
+    content = f"""You are YUMEYE, a creative English-speaking chef.
+
+User profile:
+- Dietary restrictions: {restrictions}
+- Allergies: {allergies}
+- Strongly dislikes: {disliked}
+- Favorite cuisines: {cuisines}
+- Spice preference: {spice}
+- Default servings: {servings}
+- Skill level: {skill}
+
+Instructions:
+Generate ONLY one detailed recipe in English. You MUST use ALL ingredients provided by the user.
+
+Adapt the recipe to the user's profile:
+- Strictly respect dietary restrictions and allergies. If any provided ingredient conflicts (e.g., meat for a vegetarian), politely note the conflict and suggest a compliant substitution while still trying to use everything else.
+- Avoid using disliked ingredients in any additional suggestions (common pantry staples like salt, oil, or water are okay).
+- Favor styles from the user's favorite cuisines when possible.
+- Adjust heat level to match the spice preference.
+- Scale ingredients to approximately {servings} servings.
+- Use {units_desc} measurements.
+- Keep steps appropriate for a {skill} cook (very detailed and simple for beginners).
+
+Recipe format (exactly in this order):
 - Title
-- Ingredients with US measurements (1 ½ cups, 2 tsp, 6 oz…)
+- Ingredients list with precise scaled measurements
 - Numbered steps
-- Prep + cook time
+- Estimated prep time + cook time
 - 1 fun tip
-Use ALL ingredients mentioned. Be precise and professional."""
-}
 
+Be precise, professional, and encouraging."""
 
+    return {"role": "system", "content": content}
 
 def sanitize_text_add_dots(text):
     """
@@ -329,21 +468,13 @@ def stop_tts():
 # ------------------- CLEANUP (We might need to change the behavior of the cleanup because we have a small model) -------------------
 def trim_conversation(conv):
     """
-    Keeps:
-    - system prompt
-    - last MAX_HISTORY_MESSAGES messages (user/assistant)
+    Keep only the last MAX_HISTORY_MESSAGES user/assistant messages.
+    We no longer store the system prompt in history, so we just trim the conversation messages.
     """
     messages = conv["messages"]
-
-    # Si on n'a que le system prompt → rien à faire
-    if len(messages) <= MAX_HISTORY_MESSAGES + 1:
+    if len(messages) <= MAX_HISTORY_MESSAGES:
         return
-
-    system_msg = messages[0]
-    recent_msgs = messages[-MAX_HISTORY_MESSAGES:]
-
-    conv["messages"] = [system_msg] + recent_msgs
-    return
+    conv["messages"] = messages[-MAX_HISTORY_MESSAGES:]
 
 # ------------------- MAIN ENDPOINT -------------------
 @app.route("/upload", methods=["POST"])
@@ -384,7 +515,7 @@ def upload_audio():
         # ---- 3. Initialise / retrieve conversation ----
         if conversation_id not in CONVERSATIONS:
             CONVERSATIONS[conversation_id] = {
-                "messages": [SYSTEM_PROMPT],
+                "messages": [],  # ← empty, no static system prompt
                 "last_used": datetime.now()
             }
 
@@ -397,10 +528,13 @@ def upload_audio():
         # Trim conversation history if too long
         trim_conversation(conv)
 
-        # ---- 4. Call Ollama ----
+        # ---- 4. Call Ollama (with dynamic system prompt) ----
+        system_prompt = build_system_prompt(current_user)
+        full_messages = [system_prompt] + conv["messages"]
+
         response = ollama.chat(
             model=LLM_MODEL,
-            messages=conv["messages"]
+            messages=full_messages
         )
         llm_reply = response["message"]["content"]
 
@@ -496,7 +630,7 @@ def upload_image():
         # ---- 1. Initialise / retrieve conversation ----
         if conversation_id not in CONVERSATIONS:
             CONVERSATIONS[conversation_id] = {
-                "messages": [SYSTEM_PROMPT],
+                "messages": [],  # ← empty, no static system prompt
                 "last_used": datetime.now()
             }
 
@@ -509,10 +643,13 @@ def upload_image():
         # Trim conversation history if too long
         trim_conversation(conv)
 
-        # ---- 2. Call Ollama ----
+        # ---- 2. Call Ollama (with dynamic system prompt) ----
+        system_prompt = build_system_prompt(current_user)
+        full_messages = [system_prompt] + conv["messages"]
+
         response = ollama.chat(
             model=LLM_MODEL,
-            messages=conv["messages"]
+            messages=full_messages
         )
         llm_reply = response["message"]["content"]
 
@@ -581,7 +718,7 @@ def texte_input():
         # ---- 1. Initialise / retrieve conversation ----
         if conversation_id not in CONVERSATIONS:
             CONVERSATIONS[conversation_id] = {
-                "messages": [SYSTEM_PROMPT],
+                "messages": [],  # ← empty, no static system prompt
                 "last_used": datetime.now()
             }
 
@@ -594,10 +731,13 @@ def texte_input():
         # Trim conversation history if too long
         trim_conversation(conv)
 
-        # ---- 2. Call Ollama ----
+        # ---- 2. Call Ollama (with dynamic system prompt) ----
+        system_prompt = build_system_prompt(current_user)
+        full_messages = [system_prompt] + conv["messages"]
+
         response = ollama.chat(
             model=LLM_MODEL,
-            messages=conv["messages"]
+            messages=full_messages
         )
         llm_reply = response["message"]["content"]
 

@@ -12,8 +12,10 @@
       padding: 20px;
       background: #f9f9fb;
       color: #333;
+
     }
     h1 { text-align: center; color: #d35400; }
+
     
     /* Logout button in top right corner */
     .logout-container {
@@ -116,6 +118,14 @@
 </head>
 <body>
 
+<!-- Top-right navigation buttons -->
+  <div style="position: absolute; top: 20px; right: 140px;">
+    <a href="{{ url_for('profile') }}"
+       style="display: inline-block; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; text-decoration: none;">
+      Edit Profile
+    </a>
+  </div>
+
   <!-- Logout Button -->
   <div class="logout-container">
     <button id="logoutBtn">Log Out</button>
@@ -148,6 +158,8 @@
       <button id="photoAction" disabled>Take & Send Photo</button>
     </div>
   </div>
+
+  
 
 
 

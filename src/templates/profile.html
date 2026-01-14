@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YUMEYE - Edit Profile</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f9f9fb;
+            color: #333;
+        }
+        h1 { text-align: center; color: #d35400; margin-bottom: 30px; }
+
+        /* Logout button (matches index.html) */
+        .logout-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+        #logoutBtn {
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #e74c3c;
+            color: white;
+        }
+        #logoutBtn:hover { background: #c0392b; }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        textarea { height: 80px; resize: vertical; }
+        .form-group { margin-bottom: 20px; }
+        .errors { color: #e74c3c; font-size: 14px; margin-top: 5px; }
+        .submit-btn {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .submit-btn:hover { background-color: #2980b9; }
+        .nav-links {
+            text-align: center;
+            margin-top: 30px;
+        }
+        .nav-links a {
+            color: #3498db;
+            text-decoration: none;
+            margin: 0 15px;
+        }
+        .nav-links a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <!-- Logout Button (same as index.html) -->
+    <div class="logout-container">
+        <button id="logoutBtn">Log Out</button>
+    </div>
+
+    <div class="container">
+        <h1>Edit Your Cooking Profile</h1>
+        
+        <form method="POST">
+            {{ form.hidden_tag() }}
+            
+            <div class="form-group">
+                {{ form.dietary_restrictions.label }}
+                {{ form.dietary_restrictions(placeholder="e.g. vegetarian, gluten-free, vegan (comma-separated)") }}
+                {% if form.dietary_restrictions.errors %}
+                    <div class="errors">{% for error in form.dietary_restrictions.errors %}{{ error }}<br>{% endfor %}</div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.allergies.label }}
+                {{ form.allergies(placeholder="e.g. peanuts, shellfish, dairy (comma-separated)") }}
+                {% if form.allergies.errors %}
+                    <div class="errors">{% for error in form.allergies.errors %}{{ error }}<br>{% endfor %}</div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.disliked_ingredients.label }}
+                {{ form.disliked_ingredients(placeholder="e.g. cilantro, mushrooms, olives (comma-separated)") }}
+                {% if form.disliked_ingredients.errors %}
+                    <div class="errors">{% for error in form.disliked_ingredients.errors %}{{ error }}<br>{% endfor %}</div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.favorite_cuisines.label }}
+                {{ form.favorite_cuisines(placeholder="e.g. Italian, Mexican, Thai (comma-separated)") }}
+                {% if form.favorite_cuisines.errors %}
+                    <div class="errors">{% for error in form.favorite_cuisines.errors %}{{ error }}<br>{% endfor %}</div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.spice_level.label }}
+                {{ form.spice_level() }}
+            </div>
+            
+            <div class="form-group">
+                {{ form.default_servings.label }}
+                {{ form.default_servings(placeholder="e.g. 4") }}
+                {% if form.default_servings.errors %}
+                    <div class="errors">{% for error in form.default_servings.errors %}{{ error }}<br>{% endfor %}</div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.skill_level.label }}
+                {{ form.skill_level() }}
+            </div>
+            
+            <div class="form-group">
+                {{ form.measurement_preference.label }}
+                {{ form.measurement_preference() }}
+            </div>
+            
+            {{ form.submit(class="submit-btn") }}
+        </form>
+        
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">← Back to Home</a>
+        </div>
+    </div>
+
+    <script>
+        // Simple logout handler (same logic as index.html)
+        document.getElementById('logoutBtn').onclick = async () => {
+            try {
+                const response = await fetch("/logout", { method: "POST" });
+                if (response.ok) {
+                    localStorage.removeItem("conversation_id");
+                    window.location.href = "/login";
+                } else {
+                    alert("Failed to log out.");
+                }
+            } catch (err) {
+                alert("Network error during logout.");
+            }
+        };
+    </script>
+</body>
+</html>
